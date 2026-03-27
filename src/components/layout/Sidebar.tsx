@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuthStore } from "@/store/useAuthStore";
 import { LayoutDashboard, Calendar, History, Settings, Users } from "lucide-react";
 import { cn } from "@/lib/utils"; // Hàm gộp class có sẵn khi cài Shadcn
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { isAdmin } = useAuth();
+  const { isAdmin } = useAuthStore();
 
   const menuItems = [
     { name: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },

@@ -5,6 +5,7 @@ export interface LoginRequest {
 
 export interface AuthResponse {
   accessToken: string;
+  refreshToken: string; // THÊM DÒNG NÀY
   tokenType: string;
 }
 
