@@ -8,13 +8,17 @@ export const useAuth = () => {
 
   useEffect(() => {
     const token = Cookies.get("accessToken");
-    if (token) {
+    
+    // Kiểm tra thêm xem token có phải là chuỗi 'undefined' do code cũ lưu nhầm không
+    if (token && token !== "undefined") {
       try {
         const decoded = jwtDecode<DecodedToken>(token);
         setUser(decoded);
       } catch (error) {
         console.error("Token không hợp lệ:", error);
         setUser(null);
+        // QUAN TRỌNG: Nếu token lỗi, tự động xóa cookie rác đi để lần sau không bị crash
+        Cookies.remove("accessToken");
       }
     }
   }, []);

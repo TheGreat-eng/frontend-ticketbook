@@ -1,55 +1,104 @@
-"use client"; // Bắt buộc vì có dùng useState và onClick
+"use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Cookies from "js-cookie";
 import { authService } from "@/services/authService";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Cookies from "js-cookie";
+import { toast } from "sonner";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 import Link from "next/link";
+// Nhớ import UI components của bạn (Input, Button...)
+
+// 1. Zod schema để check lỗi người dùng nhập chưa đủ (bắt trước khi gọi API)
+const loginSchema = z.object({
+  email: z.string().min(1, "Vui lòng nhập email").email("Email không hợp lệ"),
+  password: z.string().min(1, "Vui lòng nhập mật khẩu"),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleLogin = async () => {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: "", password: "" },
+  });
+
+  // 2. Hàm gọi API Login
+  const onSubmit = async (data: LoginFormValues) => {
+    setIsLoading(true);
     try {
-      const res = await authService.login({ email, password });
-      // Lưu Token vào Cookie để Middleware Server đọc được
-      Cookies.set("accessToken", res.accessToken, { expires: 1 }); 
-      alert("Đăng nhập thành công!");
-      router.push("/dashboard"); // Chuyển hướng
-    } catch (error) {
-      alert("Đăng nhập thất bại. Kiểm tra lại email/mật khẩu!");
+      // Gọi API lên Spring Boot
+      const response = await authService.login(data);
+      
+      // Lúc này Backend đã trả về JSON: { status: 200, message: "...", data: { accessToken: "..." } }
+      // Và authService đã return response.data.data
+      const token = response.accessToken;
+
+      // Lưu token vào Cookie
+      Cookies.set("accessToken", token, { expires: 1 }); // expires: 1 ngày
+
+      toast.success("Đăng nhập thành công!");
+      
+      // Đẩy vào trang dashboard
+      router.push("/dashboard");
+      
+    } catch (error: any) {
+      // IN RA CONSOLE ĐỂ TÌM ĐÚNG BỆNH
+      console.error("Lỗi thật sự từ Axios:", error);
+      
+      if (!error.response) {
+         toast.error("Không thể kết nối đến Backend. Hãy kiểm tra xem Server đã chạy chưa!");
+      } else {
+         toast.error(error.response?.data?.message || "Email hoặc mật khẩu không đúng!");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
+    // Dưới này bạn bỏ phần giao diện của bạn vào
+    // Nhớ đổi thẻ <form> bao bọc các input và có: onSubmit={handleSubmit(onSubmit)}
+    // Ví dụ cơ bản để bạn ráp vào UI của bạn:
     <div className="flex h-screen items-center justify-center bg-slate-50">
-      <Card className="w-[350px] shadow-lg">
-        <CardHeader>
-          <CardTitle className="text-center text-2xl font-bold">TicketPro Login</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Input 
-            placeholder="Email" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)} 
+      {/* ... UI GIAO DIỆN CỦA BẠN ... */}
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        
+        <div>
+          <input 
+            {...register("email")}
+            placeholder="test@gmail.com" 
+            disabled={isLoading}
+            className="border p-2 w-full rounded"
           />
-          <Input 
-            type="password" 
-            placeholder="Mật khẩu" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
+          {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>}
+        </div>
+
+        <div>
+          <input 
+            type="password"
+            {...register("password")}
+            placeholder="......" 
+            disabled={isLoading}
+            className="border p-2 w-full rounded"
           />
-          <Button onClick={handleLogin} className="w-full">Vào hệ thống</Button>
-          <p className="text-center text-sm text-gray-500 mt-4">
-  Chưa có tài khoản? <Link href="/register" className="text-blue-600 hover:underline">Đăng ký ngay</Link>
-</p>
-        </CardContent>
-      </Card>
+          {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>}
+        </div>
+
+        <button type="submit" disabled={isLoading} className="bg-black text-white p-2 w-full rounded">
+          {isLoading ? "Đang xử lý..." : "Vào hệ thống"}
+        </button>
+
+      </form>
     </div>
   );
 }
