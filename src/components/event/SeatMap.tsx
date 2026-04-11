@@ -6,6 +6,8 @@ import SockJS from 'sockjs-client';
 import { Client } from '@stomp/stompjs';
 import { toast } from "sonner";
 
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8080/ws';
+
 interface SeatMapProps {
   seats: SeatDTO[]; // Dữ liệu khởi tạo từ API
   onSelect: (ids: number[]) => void;
@@ -22,7 +24,7 @@ export default function SeatMap({ seats: initialSeats, onSelect }: SeatMapProps)
   }, [initialSeats]);
 
   useEffect(() => {
-    const socket = new SockJS('http://localhost:8080/ws');
+    const socket = new SockJS(WS_URL);
     const stompClient = new Client({
       webSocketFactory: () => socket,
       reconnectDelay: 5000,

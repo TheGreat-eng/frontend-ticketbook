@@ -2,8 +2,10 @@
 import axios from "axios";
 import Cookies from "js-cookie";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api";
+
 const axiosClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api",
+  baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
 });
 
@@ -24,7 +26,7 @@ axiosClient.interceptors.response.use(
       try {
         const refreshToken = Cookies.get("refreshToken");
         // Gọi API refresh token
-        const res = await axios.post("http://localhost:8080/api/auth/refresh", { refreshToken });
+        const res = await axios.post(`${API_BASE_URL}/auth/refresh`, { refreshToken });
         const { accessToken } = res.data.data;
         
         Cookies.set("accessToken", accessToken);
