@@ -70,6 +70,7 @@ export default function EventsListPage() {
                 </div>
               </div>
 
+              {/* BẤM VÀO ĐÂY SẼ CHUYỂN SANG TRANG /events/[id] ĐỂ VÀO PHÒNG CHỜ */}
               <Link href={`/dashboard/events/${event.id}`} className="block mt-auto">
                 <button className="w-full bg-slate-900 hover:bg-blue-600 text-white py-4 rounded-2xl font-bold transition-colors">
                   Mua vé ngay

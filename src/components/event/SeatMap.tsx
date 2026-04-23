@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { SeatDTO } from '@/types/event';
 import SockJS from 'sockjs-client';
 import { Client } from '@stomp/stompjs';
@@ -9,16 +9,20 @@ import { toast } from "sonner";
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8080/ws';
 
 interface SeatMapProps {
-  seats: SeatDTO[]; // Dữ liệu khởi tạo từ API
+  seats: SeatDTO[]; 
   onSelect: (ids: number[]) => void;
 }
 
 export default function SeatMap({ seats: initialSeats, onSelect }: SeatMapProps) {
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
-  // Chuyển seats thành state để có thể cập nhật động khi nhận tin nhắn WebSocket
   const [currentSeats, setCurrentSeats] = useState<SeatDTO[]>(initialSeats);
 
-  // Đồng bộ lại currentSeats nếu ban đầu initialSeats thay đổi (do API trả về chậm)
+  // GIẢI PHÁP ROOT CAUSE: Dùng useRef để theo dõi ghế đang chọn, tránh lỗi React "Cannot update a component"
+  const selectedSeatsRef = useRef<number[]>([]);
+  useEffect(() => {
+    selectedSeatsRef.current = selectedSeats;
+  }, [selectedSeats]);
+
   useEffect(() => {
     setCurrentSeats(initialSeats);
   }, [initialSeats]);
@@ -29,34 +33,28 @@ export default function SeatMap({ seats: initialSeats, onSelect }: SeatMapProps)
       webSocketFactory: () => socket,
       reconnectDelay: 5000,
       onConnect: () => {
-        console.log("✅ WebSocket Connected");
-        
         stompClient.subscribe('/topic/seats', (message) => {
           const soldSeatIds: number[] = JSON.parse(message.body);
           
-          toast.info(`Ghế [${soldSeatIds.join(", ")}] vừa được mua!`, {
-            description: "Hệ thống đang cập nhật trạng thái thực tế.",
-          });
-
-          // CẬP NHẬT TRẠNG THÁI GHẾ REAL-TIME
+          // 1. Cập nhật UI ghế thành màu xám (SOLD)
           setCurrentSeats((prevSeats) =>
             prevSeats.map((seat) =>
-              soldSeatIds.includes(seat.id) 
-                ? { ...seat, status: 'SOLD' } // Đổi màu xám ngay lập tức
-                : seat
+              soldSeatIds.includes(seat.id) ? { ...seat, status: 'SOLD' } : seat
             )
           );
 
-          // Nếu người dùng đang chọn đúng cái ghế vừa bị người khác mua mất
-          // thì tự động bỏ chọn ghế đó ra khỏi danh sách selectedSeats
-          setSelectedSeats((prevSelected) => {
-            const filtered = prevSelected.filter(id => !soldSeatIds.includes(id));
-            if (filtered.length !== prevSelected.length) {
-              onSelect(filtered); // Báo lại cho page.tsx để cập nhật lại tổng tiền
-              toast.error("Một số ghế bạn chọn đã bị người khác mua mất!");
-            }
-            return filtered;
-          });
+          // 2. Lọc ghế an toàn bằng useRef
+          const currentSelected = selectedSeatsRef.current;
+          const hasConflict = currentSelected.some(id => soldSeatIds.includes(id));
+
+          if (hasConflict) {
+            const safeSelection = currentSelected.filter(id => !soldSeatIds.includes(id));
+            setSelectedSeats(safeSelection);
+            onSelect(safeSelection); 
+            toast.error("Một số ghế bạn chọn đã bị người khác mua mất!");
+          } else {
+            toast.info(`Ghế [${soldSeatIds.join(", ")}] vừa được mua!`);
+          }
         });
       },
     });
@@ -64,15 +62,12 @@ export default function SeatMap({ seats: initialSeats, onSelect }: SeatMapProps)
     stompClient.activate();
 
     return () => {
-      if (stompClient.active) {
-        stompClient.deactivate();
-      }
+      if (stompClient.active) stompClient.deactivate();
     };
   }, [onSelect]);
 
   const toggleSeat = (seatId: number) => {
     const seat = currentSeats.find(s => s.id === seatId);
-    // Nếu ghế đã bán thì không cho chọn
     if (!seat || seat.status === 'SOLD') return;
 
     const isSelected = selectedSeats.includes(seatId);
@@ -94,18 +89,11 @@ export default function SeatMap({ seats: initialSeats, onSelect }: SeatMapProps)
 
   return (
     <div className="flex flex-col items-center bg-slate-950 p-10 rounded-3xl shadow-2xl overflow-hidden">
-      {/* Sân khấu */}
       <div className="w-2/3 h-8 bg-gradient-to-b from-blue-400 to-transparent opacity-50 rounded-full blur-sm mb-16 shadow-[0_15px_30px_rgba(59,130,246,0.5)]"></div>
       <p className="text-blue-300 text-xs tracking-[1em] mb-12 uppercase">Stage</p>
 
-      {/* Sơ đồ ghế */}
       <div className="relative w-full overflow-auto flex justify-center custom-scrollbar">
-        <svg 
-          width="1200" 
-          height="600" 
-          viewBox="0 0 1600 800"
-          className="select-none"
-        >
+        <svg width="1200" height="600" viewBox="0 0 1600 800" className="select-none">
           {currentSeats.map((seat) => {
             const xIdx = parseInt(seat.number);
             const yIdx = seat.row.charCodeAt(0) - 65;
@@ -118,32 +106,16 @@ export default function SeatMap({ seats: initialSeats, onSelect }: SeatMapProps)
             return (
               <g key={seat.id} className={isSold ? "cursor-not-allowed" : "cursor-pointer"} onClick={() => toggleSeat(seat.id)}>
                 <rect
-                  x={x}
-                  y={y}
-                  width="22"
-                  height="22"
-                  rx="4"
+                  x={x} y={y} width="22" height="22" rx="4"
                   fill={isSold ? '#334155' : isSelected ? '#3b82f6' : '#1e293b'}
                   stroke={isSelected ? '#60a5fa' : isSold ? '#1e293b' : '#475569'}
                   strokeWidth="1.5"
                   className={`transition-all duration-200 ${!isSold && 'hover:stroke-blue-400'}`}
                 />
-                {xIdx === 1 && (
-                  <text x={x - 40} y={y + 16} fill="#475569" fontSize="12" className="font-bold">
-                    {seat.row}
-                  </text>
-                )}
               </g>
             );
           })}
         </svg>
-      </div>
-
-      {/* Chú giải */}
-      <div className="mt-10 flex gap-8 text-sm text-slate-400">
-        <div className="flex items-center gap-2"><div className="w-4 h-4 bg-[#1e293b] rounded border border-slate-600"></div> Trống</div>
-        <div className="flex items-center gap-2"><div className="w-4 h-4 bg-blue-600 rounded"></div> Đang chọn</div>
-        <div className="flex items-center gap-2"><div className="w-4 h-4 bg-[#334155] rounded"></div> Đã bán</div>
       </div>
     </div>
   );
