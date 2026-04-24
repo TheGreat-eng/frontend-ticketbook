@@ -8,6 +8,13 @@ import { toast } from "sonner";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:8080/ws';
 
+
+const getWsUrl = () => {
+  const path = process.env.NEXT_PUBLIC_WS_URL || '/ws';
+  // Nếu path bắt đầu bằng http là tuyệt đối, nếu không thì ghép với origin hiện tại
+  return path.startsWith('http') ? path : `${window.location.origin}${path}`;
+};
+
 interface SeatMapProps {
   seats: SeatDTO[]; 
   onSelect: (ids: number[]) => void;
@@ -28,7 +35,7 @@ export default function SeatMap({ seats: initialSeats, onSelect }: SeatMapProps)
   }, [initialSeats]);
 
   useEffect(() => {
-    const socket = new SockJS(WS_URL);
+    const socket = new SockJS(getWsUrl());
     const stompClient = new Client({
       webSocketFactory: () => socket,
       reconnectDelay: 5000,
